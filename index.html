@@ -39,9 +39,9 @@
   <div class="controls">
     <label>User</label>
     <select id="user">
-      <option value="dave">Dave</option>
-      <option value="tom">Tom</option>
-      <option value="will">Will</option>
+      <option value="R">R</option>
+      <option value="A">A</option>
+      <option value="AR">AR</option>
     </select>
 
     <label>KML File</label>
@@ -60,20 +60,20 @@
     }).addTo(map);
 
     const userColors = {
-      dave: '#00E5FF', // cyan
-      tom:  '#FF4DE3', // magenta
-      will: '#FFD400'  // yellow
+      R: '#00E5FF', // cyan
+      A:  '#FF4DE3', // magenta
+      AR: '#FFD400'  // yellow
     };
     const userNames = {
-      dave: 'Dave',
-      tom:  'Tom',
-      will: 'Will'
+      R: 'R',
+      A:  'A',
+      AR: 'AR'
     };
 
     const layers = {
-      dave: L.geoJSON(null, styleFor('dave')).addTo(map),
-      tom:  L.geoJSON(null, styleFor('tom')).addTo(map),
-      will: L.geoJSON(null, styleFor('will')).addTo(map),
+      R: L.geoJSON(null, styleFor('R')).addTo(map),
+      A:  L.geoJSON(null, styleFor('A')).addTo(map),
+      AR: L.geoJSON(null, styleFor('AR')).addTo(map),
     };
 
     function styleFor(userId) {
