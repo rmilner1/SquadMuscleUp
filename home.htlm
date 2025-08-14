@@ -1,0 +1,203 @@
+<!--
+MIT License
+
+Copyright (c) 2025 [Your Name]
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Squadrats KML → Leaflet (Local Multi-User)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- togeojson (KML -> GeoJSON) -->
+  <script src="https://unpkg.com/@tmcw/togeojson@5.8.0/dist/togeojson.umd.js"></script>
+  <!-- tokml (GeoJSON -> KML) -->
+  <script src="https://unpkg.com/tokml@0.4.0/tokml.js"></script>
+
+  <style>
+    body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; }
+    #map { width: 100%; height: 100%; }
+    .controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      max-width: 250px;
+    }
+    label { font-size: 13px; display: block; margin-top: 5px; }
+    select, input[type="file"], button {
+      width: 100%; margin-top: 3px; margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="controls">
+    <label>User</label>
+    <select id="user">
+      <option value="user1">User 1</option>
+      <option value="user2">User 2</option>
+      <option value="user3">User 3</option>
+    </select>
+
+    <label>KML File</label>
+    <input type="file" id="file" accept=".kml,application/vnd.google-earth.kml+xml" />
+
+    <button id="uploadBtn">Upload & Display</button>
+    <button id="clearBtn">Clear My Layer</button>
+    <button id="downloadBtn">Download My Layer as KML</button>
+    <button id="fitBtn">Fit to All Layers</button>
+  </div>
+
+  <script>
+    const map = L.map('map').setView([51.505, -0.09], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const userColors = {
+      user1: '#00E5FF',
+      user2: '#FF4DE3',
+      user3: '#FFD400'
+    };
+    const userNames = {
+      user1: 'User 1',
+      user2: 'User 2',
+      user3: 'User 3'
+    };
+
+    const layers = {
+      user1: L.geoJSON(null, styleFor('user1')).addTo(map),
+      user2: L.geoJSON(null, styleFor('user2')).addTo(map),
+      user3: L.geoJSON(null, styleFor('user3')).addTo(map),
+    };
+
+    function styleFor(userId) {
+      return {
+        style: () => ({
+          color: userColors[userId],
+          weight: 1,
+          fillColor: userColors[userId],
+          fillOpacity: 0.25
+        }),
+        onEachFeature: (feature, layer) => {
+          const who = feature?.properties?.__user || userNames[userId];
+          const name = feature?.properties?.name || 'Polygon';
+          layer.bindTooltip(`${who}: ${name}`, { sticky: true });
+        }
+      };
+    }
+
+    const els = {
+      user: document.getElementById('user'),
+      file: document.getElementById('file'),
+      uploadBtn: document.getElementById('uploadBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      downloadBtn: document.getElementById('downloadBtn'),
+      fitBtn: document.getElementById('fitBtn')
+    };
+
+    els.uploadBtn.onclick = async () => {
+      const file = els.file.files?.[0];
+      if (!file) {
+        alert('Choose a KML file first.');
+        return;
+      }
+      const uid = els.user.value;
+      try {
+        const text = await file.text();
+        const xml = new DOMParser().parseFromString(text, 'application/xml');
+        const geo = toGeoJSON.kml(xml);
+        geo.features = (geo.features || []).map((f, i) => ({
+          ...f,
+          properties: {
+            ...(f.properties || {}),
+            __user: userNames[uid],
+            name: f.properties?.name || `Polygon ${i+1}`
+          }
+        }));
+        layers[uid].clearLayers();
+        layers[uid].addData(geo);
+        els.fitBtn.click();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to read KML.');
+      }
+    };
+
+    els.clearBtn.onclick = () => {
+      const uid = els.user.value;
+      layers[uid].clearLayers();
+    };
+
+    els.downloadBtn.onclick = () => {
+      const uid = els.user.value;
+      const geo = collectGeoJSON(layers[uid]);
+      if (!geo) {
+        alert('No features to export for ' + userNames[uid]);
+        return;
+      }
+      const kmlStr = tokml(geo, { documentName: `${userNames[uid]} layer` });
+      downloadBlob(new Blob([kmlStr], { type: 'application/vnd.google-earth.kml+xml' }), `${uid}.kml`);
+    };
+
+    els.fitBtn.onclick = () => {
+      const allLayers = L.featureGroup(Object.values(layers));
+      if (allLayers.getLayers().length > 0) {
+        map.fitBounds(allLayers.getBounds(), { padding: [20, 20] });
+      }
+    };
+
+    function collectGeoJSON(layer) {
+      const features = [];
+      layer.eachLayer(l => {
+        if (l.toGeoJSON) {
+          const gj = l.toGeoJSON();
+          if (gj.type === 'FeatureCollection') features.push(...gj.features);
+          else if (gj.type === 'Feature') features.push(gj);
+        }
+      });
+      if (!features.length) return null;
+      return { type: 'FeatureCollection', features };
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
